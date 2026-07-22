@@ -9,6 +9,10 @@
         <Preference
             android:key="set_planet_file"
             android:title="@string/set_planet_file" />
+        <Preference
+            android:key="scan_planet_qr_code"
+            android:title="@string/scan_planet_qr_code"
+            android:summary="@string/scan_planet_qr_code_summary" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/preferences_network">
         <CheckBoxPreference

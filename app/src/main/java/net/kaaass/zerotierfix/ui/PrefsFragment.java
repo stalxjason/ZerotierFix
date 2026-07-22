@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.util.Base64;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -24,6 +25,9 @@ import androidx.preference.SwitchPreference;
 
 import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
+import com.journeyapps.barcodescanner.CaptureActivity;
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
 
 import net.kaaass.zerotierfix.R;
 import net.kaaass.zerotierfix.service.ZeroTierOneService;
@@ -34,6 +38,7 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
@@ -61,6 +66,7 @@ public class PrefsFragment extends PreferenceFragmentCompat implements SharedPre
     private Dialog planetDialog = null;
     private Dialog loadingDialog = null;
     private ActivityResultLauncher<Intent> planetFileSelectLauncher = null;
+    private ActivityResultLauncher<ScanOptions> qrScanLauncher = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -108,6 +114,13 @@ public class PrefsFragment extends PreferenceFragmentCompat implements SharedPre
                 Toast.makeText(getContext(), R.string.cannot_open_planet, Toast.LENGTH_LONG).show();
             }
         });
+
+        // 初始化 Planet 二维码扫描结果回调
+        this.qrScanLauncher = registerForActivityResult(new ScanContract(), result -> {
+            if (result.getContents() != null) {
+                handlePlanetQrResult(result.getContents());
+            }
+        });
     }
 
     @Override
@@ -138,6 +151,21 @@ public class PrefsFragment extends PreferenceFragmentCompat implements SharedPre
             showPlanetDialog();
             return true;
         });
+
+        // 扫码添加 Planet 文件
+        Preference prefScanPlanet = findPreference("scan_planet_qr_code");
+        if (prefScanPlanet != null) {
+            prefScanPlanet.setOnPreferenceClickListener(preference -> {
+                ScanOptions options = new ScanOptions();
+                options.setPrompt(getString(R.string.scan_planet_qr_code));
+                options.setBeepEnabled(false);
+                options.setOrientationLocked(true);
+                options.setCaptureActivity(CaptureActivity.class);
+                qrScanLauncher.launch(options);
+                return true;
+            });
+        }
+
         updatePlanetSetting();
     }
 
@@ -342,5 +370,61 @@ public class PrefsFragment extends PreferenceFragmentCompat implements SharedPre
         if (this.loadingDialog != null) {
             this.loadingDialog.dismiss();
         }
+    }
+
+    /**
+     * 处理扫码得到的 planet 二维码内容。
+     * 支持两种形式：直接为 planet 的 base64 字符串，或
+     * https://.../addplanet?planet=BASE64 形式的链接（官方 ZeroTier 二维码格式）。
+     */
+    private void handlePlanetQrResult(String content) {
+        if (content == null) {
+            return;
+        }
+        String base64 = content.trim();
+        // 若为官方 addplanet 链接形式，提取 planet 查询参数
+        Uri uri = Uri.parse(content);
+        if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getQueryParameter("planet") != null) {
+            base64 = uri.getQueryParameter("planet").trim();
+        }
+        base64 = base64.replaceAll("\\s+", "");
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(base64, Base64.DEFAULT);
+        } catch (IllegalArgumentException e1) {
+            try {
+                bytes = Base64.decode(base64, Base64.URL_SAFE);
+            } catch (IllegalArgumentException e2) {
+                Toast.makeText(getContext(), R.string.planet_wrong_format, Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        storePlanetFromBytes(bytes);
+    }
+
+    /**
+     * 将 planet 字节数据写入自定义 planet 文件，并启用自定义 planet。
+     */
+    private void storePlanetFromBytes(byte[] bytes) {
+        File temp = FileUtil.tempFile(requireContext());
+        try (FileOutputStream out = new FileOutputStream(temp)) {
+            out.write(bytes);
+        } catch (IOException e) {
+            Toast.makeText(getContext(), R.string.cannot_open_planet, Toast.LENGTH_LONG).show();
+            FileUtil.clearTempFile(requireContext());
+            return;
+        }
+        if (!dealTempPlanetFile()) {
+            Toast.makeText(getContext(), R.string.planet_wrong_format, Toast.LENGTH_LONG).show();
+            FileUtil.clearTempFile(requireContext());
+            return;
+        }
+        // 校验通过，启用自定义 planet
+        PreferenceManager.getDefaultSharedPreferences(requireContext()).edit()
+                .putBoolean(Constants.PREF_PLANET_USE_CUSTOM, true).apply();
+        this.prefPlanetUseCustom.setChecked(true);
+        updatePlanetSetting();
+        Snackbar.make(requireView(), R.string.set_planet_succ, BaseTransientBottomBar.LENGTH_LONG).show();
+        FileUtil.clearTempFile(requireContext());
     }
 }

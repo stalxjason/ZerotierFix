@@ -165,4 +165,8 @@
 
     <!-- 深链 / App Links -->
     <string name="deep_link_invalid">Invalid ZeroTier link.</string>
+
+    <!-- 扫码添加 Planet -->
+    <string name="scan_planet_qr_code">Scan planet QR code</string>
+    <string name="scan_planet_qr_code_summary">Scan a QR code to import a custom planet file</string>
 </resources>

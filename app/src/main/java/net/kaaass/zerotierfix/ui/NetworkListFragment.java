@@ -7,9 +7,12 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import android.net.ConnectivityManager;
 import android.net.VpnService;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.util.Log;
@@ -29,6 +32,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.RecyclerView;
@@ -136,6 +140,7 @@ public class NetworkListFragment extends Fragment {
         }
     };
     private ActivityResultLauncher<Intent> vpnAuthLauncher;
+    private ActivityResultLauncher<String> requestNotificationPermissionLauncher;
     private NetworkListModel viewModel;
 
     public NetworkListFragment() {
@@ -192,6 +197,15 @@ public class NetworkListFragment extends Fragment {
                 updateNetworkListAndNotify();
             }
         });
+
+        // 初始化通知权限申请结果回调
+        this.requestNotificationPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(), isGranted -> {
+                    if (!isGranted) {
+                        // 用户拒绝（可能永久拒绝），引导去系统设置开启
+                        showNoNotificationAlertDialog();
+                    }
+                });
     }
 
     @Override
@@ -204,10 +218,18 @@ public class NetworkListFragment extends Fragment {
         this.eventBus.post(new IsServiceRunningRequestEvent());
 
         // 检查通知权限
-        var notificationManager = NotificationManagerCompat.from(requireContext());
-        if (!notificationManager.areNotificationsEnabled()) {
-            // 无通知权限
-            showNoNotificationAlertDialog();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+：主动申请 POST_NOTIFICATIONS 运行时权限
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        } else {
+            // Android 12-：检查系统通知总开关
+            var notificationManager = NotificationManagerCompat.from(requireContext());
+            if (!notificationManager.areNotificationsEnabled()) {
+                showNoNotificationAlertDialog();
+            }
         }
     }
 

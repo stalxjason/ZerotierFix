@@ -84,7 +84,7 @@ public class JoinNetworkActivity extends SingleFragmentActivity {
             ScanOptions options = new ScanOptions();
             options.setPrompt(getString(R.string.scan_qr_prompt));
             options.setBeepEnabled(false);
-            options.setOrientationLocked(false);
+            options.setOrientationLocked(true);
             options.setCaptureActivity(CaptureActivity.class);
             qrScanLauncher.launch(options);
             return true;

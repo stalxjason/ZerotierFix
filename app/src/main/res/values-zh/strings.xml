@@ -163,4 +163,8 @@
 
     <!-- 深链 / App Links -->
     <string name="deep_link_invalid">无效的 ZeroTier 链接。</string>
+
+    <!-- 扫码添加 Planet -->
+    <string name="scan_planet_qr_code">扫描 Planet 二维码</string>
+    <string name="scan_planet_qr_code_summary">扫描二维码以导入自定义 Planet 文件</string>
 </resources>
