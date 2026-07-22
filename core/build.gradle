@@ -21,8 +21,19 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    // 将子模块中的 JNI Java 源码（com.zerotier.sdk.*）纳入编译。
+    // 原仓库通过 core/src/main/java 的符号链接指向 externals/core/java/src，
+    // 在 Windows 等不支持符号链接的环境下会失效，这里改为显式 sourceSet，
+    // 保证跨平台可构建，并使核心升级（1.4.6 → 1.14.0）时 Java 与 Native 同步更新。
+    sourceSets {
+        main {
+            java.srcDirs = ['../externals/core/java/src']
+            manifest.srcFile 'src/main/AndroidManifest.xml'
+        }
     }
 
     externalNativeBuild {

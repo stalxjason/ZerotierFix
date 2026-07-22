@@ -7,13 +7,13 @@ package net.kaaass.zerotierfix.util;
  */
 public class Constants {
 
-    public static final String PREF_NETWORK_USE_CELLULAR_DATA = "network_use_cellular_data";
-
     public static final String PREF_PLANET_USE_CUSTOM = "planet_use_custom";
 
     public static final String PREF_SET_PLANET_FILE = "set_planet_file";
 
     public static final String PREF_NETWORK_DISABLE_IPV6 = "network_disable_ipv6";
+
+    public static final String PREF_NETWORK_DISABLE_CONNECTIVITY_CHECK = "network_disable_connectivity_check";
 
     public static final String PREF_GENERAL_START_ZEROTIER_ON_BOOT = "general_start_zerotier_on_boot";
 

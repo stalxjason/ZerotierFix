@@ -24,4 +24,9 @@
     <color name="logo_bkg">#FAC073</color>
 
     <color name="zerotier_orange">#fac073</color>
+
+    <!-- Material 3 fallback tokens (overridden by Monet dynamic color on Android 12+) -->
+    <color name="zerotier_orange_dark">#C9762F</color>
+    <color name="zerotier_orange_container">#FFE0B2</color>
+    <color name="zerotier_orange_on_container">#3A2400</color>
 </resources>

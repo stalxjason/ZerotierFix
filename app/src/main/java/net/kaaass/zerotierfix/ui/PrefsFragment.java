@@ -257,12 +257,7 @@ public class PrefsFragment extends PreferenceFragmentCompat implements SharedPre
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (key.equals(Constants.PREF_NETWORK_USE_CELLULAR_DATA)) {
-            // 移动网络数据配置
-            if (sharedPreferences.getBoolean(Constants.PREF_NETWORK_USE_CELLULAR_DATA, false)) {
-                requireActivity().startService(new Intent(getActivity(), ZeroTierOneService.class));
-            }
-        }
+        // 移动网络限制已移除，此处不再处理相关偏好
     }
 
     /**

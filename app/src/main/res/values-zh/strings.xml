@@ -57,7 +57,6 @@
     <string name="preferences_network_auto_rejoin">打开时自动重新加入网络</string>
     <string name="preferences_network_disable_ipv6">禁用 IPv6</string>
     <string name="preferences_network_disable_ipv6_summary">需要手动断开、重连使配置生效</string>
-    <string name="preferences_network_use_cell_data">允许移动网络下使用</string>
     <string name="reset_planet">重置 Planet</string>
     <string name="settings">设置</string>
     <string name="status_label">状态:</string>
@@ -66,7 +65,6 @@
     <string name="status_offline">已断开</string>
     <string name="status_online">已连接</string>
     <string name="toast_no_network">没有网络连接，无法启动 ZeroTier</string>
-    <string name="toast_mobile_data">设备正在使用移动网络，必须开启“允许移动网络下使用”选项以启动 ZeroTier</string>
     <string name="menu_peers">结点列表</string>
     <string name="menu_orbit">入轨</string>
     <string name="enabled">启用</string>
@@ -151,4 +149,18 @@
     <string name="dialog_no_notification_alert_title">未开启通知权限</string>
     <string name="open_notification_settings">打开通知设置</string>
     <string name="dont_show_again">不再提示</string>
+
+    <!-- 扫码加入网络 -->
+    <string name="scan_qr">扫码</string>
+    <string name="scan_qr_code">扫描二维码</string>
+    <string name="scan_qr_prompt">请扫描 ZeroTier 网络二维码</string>
+    <string name="scan_qr_invalid">无法从二维码中识别有效的网络 ID。</string>
+    <string name="scan_qr_failed">扫码已取消或失败。</string>
+
+    <!-- 禁用连接检查 -->
+    <string name="preferences_network_disable_connectivity_check">禁用连接检查</string>
+    <string name="preferences_network_disable_connectivity_check_summary">尝试连接 ZeroTier 前不检查网络连接。</string>
+
+    <!-- 深链 / App Links -->
+    <string name="deep_link_invalid">无效的 ZeroTier 链接。</string>
 </resources>

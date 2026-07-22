@@ -39,6 +39,7 @@ import com.zerotier.sdk.Version;
 
 import net.kaaass.zerotierfix.BuildConfig;
 import net.kaaass.zerotierfix.R;
+import static net.kaaass.zerotierfix.model.type.NetworkStatus.*;
 import net.kaaass.zerotierfix.ZerotierFixApplication;
 import net.kaaass.zerotierfix.events.AfterJoinNetworkEvent;
 import net.kaaass.zerotierfix.events.IsServiceRunningReplyEvent;
@@ -543,9 +544,6 @@ public class NetworkListFragment extends Fragment {
             this.viewModel.doChangeConnectNetwork(null);
             // 启动网络
             var context = requireContext();
-            boolean useCellularData = PreferenceManager
-                    .getDefaultSharedPreferences(context)
-                    .getBoolean(Constants.PREF_NETWORK_USE_CELLULAR_DATA, false);
             var activeNetworkInfo = ((ConnectivityManager) context
                     .getSystemService(Context.CONNECTIVITY_SERVICE))
                     .getActiveNetworkInfo();
@@ -555,8 +553,8 @@ public class NetworkListFragment extends Fragment {
                     Toast.makeText(NetworkListFragment.this.getContext(), R.string.toast_no_network, Toast.LENGTH_SHORT).show();
                     switchHandle.setChecked(false);
                 });
-            } else if (useCellularData || !(activeNetworkInfo.getType() == 0)) {
-                // 可以连接至网络
+            } else {
+                // 可以连接至网络（不再限制移动数据）
                 // 更新 DB 中的网络状态
                 DatabaseUtils.writeLock.lock();
                 try {
@@ -577,12 +575,6 @@ public class NetworkListFragment extends Fragment {
                 }
                 this.viewModel.doChangeConnectNetwork(selectedNetwork.getNetworkId());
                 Log.d(TAG, "Joining Network: " + selectedNetwork.getNetworkIdStr());
-            } else {
-                // 移动数据且未确认
-                requireActivity().runOnUiThread(() -> {
-                    Toast.makeText(this.getContext(), R.string.toast_mobile_data, Toast.LENGTH_SHORT).show();
-                    switchHandle.setChecked(false);
-                });
             }
         } else {
             // 关闭网络

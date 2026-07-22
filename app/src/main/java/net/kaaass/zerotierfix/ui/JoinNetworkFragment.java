@@ -111,6 +111,15 @@ public class JoinNetworkFragment extends Fragment implements CustomDNSListener {
                 JoinNetworkFragment.this.mDefaultRouteCheckBox.setEnabled(false);
             }
         });
+        // 从深链 / 扫码传入的初始 Network ID（SingleFragmentActivity 已将 Intent extra 注入 arguments）
+        Bundle arguments = getArguments();
+        if (arguments != null) {
+            String initialId = arguments.getString(JoinNetworkActivity.EXTRA_NETWORK_ID);
+            if (initialId != null && initialId.length() == 16) {
+                this.mNetworkIdTextView.setText(initialId);
+            }
+        }
+
         this.mDefaultRouteCheckBox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             /* class com.zerotier.one.ui.JoinNetworkFragment.AnonymousClass3 */
 
@@ -227,6 +236,17 @@ public class JoinNetworkFragment extends Fragment implements CustomDNSListener {
     @Override // com.zerotier.one.ui.CustomDNSListener
     public void setDNSv6_2(String str) {
         this.mDNSv6_2 = str;
+    }
+
+    /**
+     * 由扫码 / 深链结果回填 Network ID。会触发输入校验，自动启用「加入」按钮。
+     *
+     * @param networkId 16 位十六进制 Network ID
+     */
+    public void prefill(String networkId) {
+        if (this.mNetworkIdTextView != null && networkId != null) {
+            this.mNetworkIdTextView.setText(networkId);
+        }
     }
 
     abstract class TextValidator implements TextWatcher {

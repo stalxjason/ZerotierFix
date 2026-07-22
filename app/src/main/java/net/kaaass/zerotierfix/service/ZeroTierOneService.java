@@ -6,6 +6,9 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.net.VpnService;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -54,6 +57,7 @@ import net.kaaass.zerotierfix.model.MoonOrbit;
 import net.kaaass.zerotierfix.model.Network;
 import net.kaaass.zerotierfix.model.NetworkDao;
 import net.kaaass.zerotierfix.model.type.DNSMode;
+import static net.kaaass.zerotierfix.model.type.DNSMode.*;
 import net.kaaass.zerotierfix.ui.NetworkListActivity;
 import net.kaaass.zerotierfix.util.Constants;
 import net.kaaass.zerotierfix.util.DatabaseUtils;
@@ -98,6 +102,8 @@ public class ZeroTierOneService extends VpnService implements Runnable, EventLis
     ParcelFileDescriptor vpnSocket;
     private int bindCount = 0;
     private boolean disableIPv6 = false;
+    private boolean disableConnectionCheck = false;
+    private ConnectivityManager.NetworkCallback mReconnectCallback = null;
     private int mStartID = -1;
     private long networkId = 0;
     private long nextBackgroundTaskDeadline = 0;
@@ -319,21 +325,17 @@ public class ZeroTierOneService extends VpnService implements Runnable, EventLis
 
         // 检查当前的网络环境
         var preferences = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean useCellularData = preferences.getBoolean(Constants.PREF_NETWORK_USE_CELLULAR_DATA, false);
         this.disableIPv6 = preferences.getBoolean(Constants.PREF_NETWORK_DISABLE_IPV6, false);
+        this.disableConnectionCheck = preferences.getBoolean(Constants.PREF_NETWORK_DISABLE_CONNECTIVITY_CHECK, false);
         var currentNetworkInfo = NetworkInfoUtils.getNetworkInfoCurrentConnection(this);
 
-        if (currentNetworkInfo == NetworkInfoUtils.CurrentConnection.CONNECTION_NONE) {
-            // 未连接网络
-            Toast.makeText(this, R.string.toast_no_network, Toast.LENGTH_SHORT).show();
-            stopSelf(this.mStartID);
-            return START_NOT_STICKY;
-        } else if (currentNetworkInfo == NetworkInfoUtils.CurrentConnection.CONNECTION_MOBILE &&
-                !useCellularData) {
-            // 使用移动网络，但未在设置中允许移动网络访问
-            Toast.makeText(this, R.string.toast_mobile_data, Toast.LENGTH_LONG).show();
-            stopSelf(this.mStartID);
-            return START_NOT_STICKY;
+        if (!this.disableConnectionCheck) {
+            if (currentNetworkInfo == NetworkInfoUtils.CurrentConnection.CONNECTION_NONE) {
+                // 未连接网络：等待 Wi-Fi/Cell 重连，而非立即退出
+                Toast.makeText(this, R.string.toast_no_network, Toast.LENGTH_SHORT).show();
+                waitForReconnect();
+                return START_STICKY;
+            }
         }
 
         // 启动 ZT 服务
@@ -421,7 +423,63 @@ public class ZeroTierOneService extends VpnService implements Runnable, EventLis
         return START_STICKY;
     }
 
+    /**
+     * 网络不可用时，注册系统网络回调，待 Wi-Fi/Cell 恢复后自动重试启动。
+     * 超时（30s）仍未恢复则停止服务。对应官网 1.16.0「等待重连」改进。
+     */
+    private void waitForReconnect() {
+        // 避免重复注册
+        if (this.mReconnectCallback != null) {
+            return;
+        }
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (cm == null) {
+            stopSelf(this.mStartID);
+            return;
+        }
+        this.mReconnectCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(android.net.Network network) {
+                unregisterReconnect();
+                // 网络恢复，携带已确定的 networkId 重试启动（保留原始 startId）
+                ZeroTierOneService.this.onStartCommand(
+                        new Intent(ZeroTierOneService.this, ZeroTierOneService.class)
+                                .putExtra(ZT1_NETWORK_ID, ZeroTierOneService.this.networkId),
+                        ZeroTierOneService.this.mStartID, ZeroTierOneService.this.mStartID);
+            }
+
+            @Override
+            public void onUnavailable() {
+                unregisterReconnect();
+                stopSelf(ZeroTierOneService.this.mStartID);
+            }
+        };
+        NetworkRequest request = new NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build();
+        // 第三个参数为超时（毫秒），超时后触发 onUnavailable
+        cm.requestNetwork(request, this.mReconnectCallback, 30 * 1000);
+    }
+
+    /**
+     * 注销重连等待回调（若存在）。
+     */
+    private void unregisterReconnect() {
+        if (this.mReconnectCallback != null) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+                if (cm != null) {
+                    cm.unregisterNetworkCallback(this.mReconnectCallback);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error unregistering reconnect callback: " + e, e);
+            }
+            this.mReconnectCallback = null;
+        }
+    }
+
     public void stopZeroTier() {
+        unregisterReconnect();
         if (this.svrSocket != null) {
             this.svrSocket.close();
             this.svrSocket = null;

@@ -21,9 +21,9 @@ allprojects {
 }
 
 ext {
-    compileSdkVersion = 33
-    minSdkVersion = 19
-    targetSdkVersion = 33
+    compileSdkVersion = 34
+    minSdkVersion = 21
+    targetSdkVersion = 34
 }
 
 task clean(type: Delete) {
