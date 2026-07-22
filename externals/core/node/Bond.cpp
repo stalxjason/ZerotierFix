@@ -1,23 +1,19 @@
-/*
- * Copyright (c)2013-2021 ZeroTier, Inc.
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * Use of this software is governed by the Business Source License included
- * in the LICENSE.TXT file in the project's root directory.
- *
- * Change Date: 2026-01-01
- *
- * On the date above, in accordance with the Business Source License, use
- * of this software will be governed by version 2.0 of the Apache License.
+ * (c) ZeroTier, Inc.
+ * https://www.zerotier.com/
  */
-/****/
 
 #include "Bond.hpp"
 
+#include "Constants.hpp"
+#include "Node.hpp"
 #include "Switch.hpp"
 
 #include <cinttypes>   // for PRId64, etc. macros
 #include <cmath>
-#include <cstdio>
 #include <string>
 
 // FIXME: remove this suppression and actually fix warnings
@@ -373,6 +369,7 @@ SharedPtr<Path> Bond::getAppropriatePath(int64_t now, int32_t flowId)
 	 */
 	if (_policy == ZT_BOND_POLICY_ACTIVE_BACKUP) {
 		if (_abPathIdx != ZT_MAX_PEER_NETWORK_PATHS && _paths[_abPathIdx].p) {
+			// fprintf(stderr, "trying to send via (_abPathIdx=%d) %s\n", _abPathIdx, pathToStr(_paths[_abPathIdx].p).c_str());
 			return _paths[_abPathIdx].p;
 		}
 	}
@@ -853,7 +850,7 @@ void Bond::sendPATH_NEGOTIATION_REQUEST(void* tPtr, int pathIdx)
 	outp.append<int16_t>(_localUtility);
 	if (_paths[pathIdx].p->address()) {
 		Metrics::pkt_path_negotiation_request_out++;
-		outp.armor(_peer->key(), false, _peer->aesKeysIfSupported());
+		outp.armor(_peer->key(), true, false, _peer->aesKeysIfSupported(), _peer->identity());
 		RR->node->putPacket(tPtr, _paths[pathIdx].p->localSocket(), _paths[pathIdx].p->address(), outp.data(), outp.size());
 		_overheadBytes += outp.size();
 	}
@@ -894,11 +891,11 @@ void Bond::sendQOS_MEASUREMENT(void* tPtr, int pathIdx, int64_t localSocket, con
 		// debug("sending QOS via link %s (len=%d)", pathToStr(_paths[pathIdx].p).c_str(), len);
 		outp.append(qosData, len);
 		if (atAddress) {
-			outp.armor(_peer->key(), false, _peer->aesKeysIfSupported());
+			outp.armor(_peer->key(), true, false, _peer->aesKeysIfSupported(), _peer->identity());
 			RR->node->putPacket(tPtr, localSocket, atAddress, outp.data(), outp.size());
 		}
 		else {
-			RR->sw->send(tPtr, outp, false);
+			RR->sw->send(tPtr, outp, false, 0, ZT_QOS_NO_FLOW);
 		}
 		Metrics::pkt_qos_out++;
 		_paths[pathIdx].packetsReceivedSinceLastQoS = 0;
@@ -932,7 +929,7 @@ void Bond::processBackgroundBondTasks(void* tPtr, int64_t now)
 				if ((_monitorInterval > 0) && (((now - _paths[i].p->_lastIn) >= (_paths[i].alive ? _monitorInterval : _failoverInterval)))) {
 					if ((_peer->remoteVersionProtocol() >= 5) && (! ((_peer->remoteVersionMajor() == 1) && (_peer->remoteVersionMinor() == 1) && (_peer->remoteVersionRevision() == 0)))) {
 						Packet outp(_peer->address(), RR->identity.address(), Packet::VERB_ECHO);	// ECHO (this is our bond's heartbeat)
-						outp.armor(_peer->key(), true, _peer->aesKeysIfSupported());
+						outp.armor(_peer->key(), true, false, _peer->aesKeysIfSupported(), _peer->identity());
 						RR->node->expectReplyTo(outp.packetId());
 						RR->node->putPacket(tPtr, _paths[i].p->localSocket(), _paths[i].p->address(), outp.data(), outp.size());
 						_paths[i].p->_lastOut = now;
@@ -1032,6 +1029,13 @@ void Bond::curateBond(int64_t now, bool rebuildBond)
 		bool satisfiedUpDelay = (now - _paths[i].lastAliveToggle) >= _upDelay;
 		// How long since the last QoS was received (Must be less than ZT_PEER_PATH_EXPIRATION since the remote peer's _qosSendInterval isn't known)
 		bool acceptableQoSAge = (_paths[i].lastQoSReceived == 0 && inTrial) || ((now - _paths[i].lastQoSReceived) < ZT_PEER_EXPIRED_PATH_TRIAL_PERIOD);
+
+		// Allow active-backup to operate without the receipt of QoS records
+		// This may be expanded to the other modes as an option
+		if (_policy == ZT_BOND_POLICY_ACTIVE_BACKUP) {
+			acceptableQoSAge = true;
+		}
+
 		currEligibility = _paths[i].allowed() && ((acceptableAge && satisfiedUpDelay && acceptableQoSAge) || inTrial);
 
 		if (currEligibility) {
@@ -1043,12 +1047,11 @@ void Bond::curateBond(int64_t now, bool rebuildBond)
 		 */
 		if (currEligibility != _paths[i].eligible) {
 			if (currEligibility == 0) {
-				log("link %s is no longer eligible", pathToStr(_paths[i].p).c_str());
+				log("link %s is no longer eligible (reason: allowed=%d, age=%d, ud=%d, qos=%d, trial=%d)", pathToStr(_paths[i].p).c_str(), _paths[i].allowed(), acceptableAge, satisfiedUpDelay, acceptableQoSAge, inTrial);
 			}
 			if (currEligibility == 1) {
 				log("link %s is eligible", pathToStr(_paths[i].p).c_str());
 			}
-			debug("\t[%d] allowed=%d, age=%d, qa=%d, ud=%d, trial=%d", i, _paths[i].allowed(), acceptableAge, acceptableQoSAge, satisfiedUpDelay, inTrial);
 			dumpPathStatus(now, i);
 			if (currEligibility) {
 				rebuildBond = true;
@@ -1496,7 +1499,8 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 {
 	int prevActiveBackupPathIdx = _abPathIdx;
 	int nonPreferredPathIdx = ZT_MAX_PEER_NETWORK_PATHS;
-	bool bFoundPrimaryLink = false;
+	bool foundPathOnPrimaryLink = false;
+	bool foundPreferredPath = false;
 
 	if (_abPathIdx != ZT_MAX_PEER_NETWORK_PATHS && ! _paths[_abPathIdx].p) {
 		_abPathIdx = ZT_MAX_PEER_NETWORK_PATHS;
@@ -1559,15 +1563,16 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 							if (! _paths[i].preferred()) {
 								// Found path on primary link, take note in case we don't find a preferred path
 								nonPreferredPathIdx = i;
-								bFoundPrimaryLink = true;
+								foundPathOnPrimaryLink = true;
 							}
 							if (_paths[i].preferred()) {
 								_abPathIdx = i;
-								bFoundPrimaryLink = true;
+								foundPathOnPrimaryLink = true;
 								if (_paths[_abPathIdx].p) {
 									SharedPtr<Link> abLink = RR->bc->getLinkBySocket(_policyAlias, _paths[_abPathIdx].p->localSocket());
 									if (abLink) {
-										log("found preferred primary link %s", pathToStr(_paths[_abPathIdx].p).c_str());
+										log("found preferred primary link (_abPathIdx=%d), %s", _abPathIdx, pathToStr(_paths[_abPathIdx].p).c_str());
+										foundPreferredPath = true;
 									}
 									break;	 // Found preferred path on primary link
 								}
@@ -1575,8 +1580,8 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 						}
 					}
 				}
-				if (bFoundPrimaryLink && (nonPreferredPathIdx != ZT_MAX_PEER_NETWORK_PATHS)) {
-					log("found non-preferred primary link");
+				if (! foundPreferredPath && foundPathOnPrimaryLink && (nonPreferredPathIdx != ZT_MAX_PEER_NETWORK_PATHS)) {
+					log("found non-preferred primary link (_abPathIdx=%d)", _abPathIdx);
 					_abPathIdx = nonPreferredPathIdx;
 				}
 			}
@@ -1614,10 +1619,10 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 		}
 		if (_paths[(*it)].p && ! _paths[(*it)].eligible) {
 			SharedPtr<Link> link = RR->bc->getLinkBySocket(_policyAlias, _paths[(*it)].p->localSocket());
-			it = _abFailoverQueue.erase(it);
 			if (link) {
-				log("link %s is ineligible, removing from failover queue (%zu links remain in queue)", pathToStr(_paths[_abPathIdx].p).c_str(), _abFailoverQueue.size());
+				log("link %s is ineligible, removing from failover queue (%zu links remain in queue)", pathToStr(_paths[(*it)].p).c_str(), _abFailoverQueue.size());
 			}
+			it = _abFailoverQueue.erase(it);
 			continue;
 		}
 		else {
@@ -1684,7 +1689,7 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 						}
 					}
 					if (! bFoundPathInQueue) {
-						_abFailoverQueue.push_front(i);
+						_abFailoverQueue.push_back(i);
 						log("add link %s to failover queue (%zu links in queue)", pathToStr(_paths[i].p).c_str(), _abFailoverQueue.size());
 						addPathToBond(i, 0);
 					}
@@ -1734,7 +1739,7 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 					}
 				}
 				if (! bFoundPathInQueue) {
-					_abFailoverQueue.push_front(i);
+					_abFailoverQueue.push_back(i);
 					log("add link %s to failover queue (%zu links in queue)", pathToStr(_paths[i].p).c_str(), _abFailoverQueue.size());
 					addPathToBond(i, 0);
 				}
@@ -1742,17 +1747,10 @@ void Bond::processActiveBackupTasks(void* tPtr, int64_t now)
 		}
 	}
 	// Sort queue based on performance
-	if (! _abFailoverQueue.empty()) {
-		for (int i = 0; i < _abFailoverQueue.size(); i++) {
-			int value_to_insert = _abFailoverQueue[i];
-			int hole_position = i;
-			while (hole_position > 0 && (_abFailoverQueue[hole_position - 1] > value_to_insert)) {
-				_abFailoverQueue[hole_position] = _abFailoverQueue[hole_position - 1];
-				hole_position = hole_position - 1;
-			}
-			_abFailoverQueue[hole_position] = value_to_insert;
-		}
-	}
+	std::sort(_abFailoverQueue.begin(), _abFailoverQueue.end(), [this](const int a, const int b) {
+		// Sort by failover score in descending order (highest score first)
+		return _paths[a].failoverScore > _paths[b].failoverScore;
+	});
 
 	/**
 	 * Short-circuit if we have no queued paths
@@ -1902,7 +1900,7 @@ void Bond::setBondParameters(int policy, SharedPtr<Bond> templateBond, bool useT
 	 * Policy defaults
 	 */
 	_abPathIdx = ZT_MAX_PEER_NETWORK_PATHS;
-	_abLinkSelectMethod = ZT_BOND_RESELECTION_POLICY_OPTIMIZE;
+	_abLinkSelectMethod = ZT_BOND_RESELECTION_POLICY_ALWAYS;
 	_rrPacketsSentOnCurrLink = 0;
 	_rrIdx = 0;
 	_packetsPerLink = 64;
@@ -2021,7 +2019,8 @@ void Bond::dumpInfo(int64_t now, bool force)
 	_lastSummaryDump = now;
 	float overhead = (_overheadBytes / (timeSinceLastDump / 1000.0f) / 1000.0f);
 	_overheadBytes = 0;
-	log("bond: bp=%d, fi=%" PRIu64 ", mi=%d, ud=%d, dd=%d, flows=%zu, leaf=%d, overhead=%f KB/s, links=(%d/%d)",
+	log("bond: ready=%d, bp=%d, fi=%" PRIu64 ", mi=%d, ud=%d, dd=%d, flows=%zu, leaf=%d, overhead=%f KB/s, links=(%d/%d)",
+		isReady(),
 		_policy,
 		_failoverInterval,
 		_monitorInterval,

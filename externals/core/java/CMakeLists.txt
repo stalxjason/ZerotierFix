@@ -25,17 +25,17 @@ if(APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -fno-rtti")
 endif()
 
-# 1.14.0 refactored out ext/lz4, ext/json-parser, node/Defaults.cpp and
-# node/Dictionary.cpp (their code is now inlined into Packet.cpp / other node
-# sources), so those files no longer exist. We compile the full node/ engine via
-# GLOB.
+# The upstream java/CMakeLists.txt still lists ext/lz4/lz4.c, ext/json-parser/json.c,
+# node/Defaults.cpp and node/Dictionary.cpp, but those files were removed from the
+# engine tree (their code is inlined into Packet.cpp / other node sources in 1.14+).
+# So we compile the full node/ engine via GLOB instead of the stale explicit list.
 #
 # Metrics.cpp MUST be kept in the build: it unconditionally defines the
 # ZeroTier::Metrics counter singletons (registry_ptr / packets / pkt_*_in / ...),
-# and the engine references these counters unguarded from Network.cpp, Node.cpp,
-# IncomingPacket.cpp, Switch.cpp, etc. Only the *publishing* logic inside
-# Metrics.cpp is disabled by the upstream default macro ZT_NO_PEER_METRICS (see
-# make-linux.mk:326); the counter definitions live OUTSIDE that guard, so
+# and the engine references these counters unguarded from Bond.cpp, Network.cpp,
+# Node.cpp, IncomingPacket.cpp, Switch.cpp, Peer.cpp, Membership.cpp, Multicaster.cpp.
+# Only the *publishing* logic inside Metrics.cpp is disabled by the upstream default
+# macro ZT_NO_PEER_METRICS; the counter definitions live OUTSIDE that guard, so
 # excluding Metrics.cpp would cause undefined-symbol link errors.
 # prometheus-cpp-lite is header-only (impls are inline in core/include/prometheus/*.h);
 # its include dirs are enough -- no separate library needs to be linked.
