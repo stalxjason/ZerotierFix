@@ -24,10 +24,10 @@
 
 ## 功能特性
 
-- 支持自建 **Moon**（月球节点）中转
-- 自定义 **Planet**（行星配置）支持：文件、**URL**、以及**扫描二维码**导入
+- 支持自建 **Moon**中转
+- 自定义 **Planet**支持：文件、**URL**、以及**扫描二维码**导入
 - 可通过**扫描二维码**或点击**深链**（`joinzt.com`、`zerotier://` 等）加入网络
-- 查看 **Peers**（节点）列表
+- 查看 **Peers**列表
 - 提供「**禁用连接检查**」选项（无网络时也可启动）
 - **Material 3** 界面，支持动态取色（Monet）
 - 内置**中文 / 英文**双语
@@ -50,11 +50,8 @@
 
 ## 下载
 
-请前往 [Releases 发布页](https://github.com/stalxjason/ZerotierFix/releases) 获取最新版本。
 
-如果你想试用每夜构建（nightly），可从
-[GitHub Actions](https://github.com/stalxjason/ZerotierFix/actions/workflows/build-app.yml?query=branch%3Amaster)
-下载。请注意每夜构建可能**不稳定**、存在 **Bug**。
+
 
 ## 从源码构建
 
@@ -84,14 +81,3 @@ cd ZerotierFix
 - 原 Android 客户端代码位于 `net.kaaass.zerotierfix`（由 `com.zerotier.one` 重命名而来）
 - 应用图标为 `ZeroTier, Inc.` 的商标，由原作者制作
 
-## 后续计划
-
-- [X] Moon 配置持久化与文件配置
-- [x] 节点列表视图
-- [x] 支持 Planet 配置
-- [x] 替换预编译的 JNI 库
-- [x] 重写并升级 UI 至 Material Design
-- [x] 内置引擎升级至 ZeroTierOne 1.16.2
-- [x] 扫码导入 Planet + Android 13 通知权限
-- [x] 扫码界面强制竖屏
-- [ ] *进行中* 用 v2 重写整个 APP
