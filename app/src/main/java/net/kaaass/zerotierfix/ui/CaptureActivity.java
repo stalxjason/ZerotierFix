@@ -1,5 +1,6 @@
 package net.kaaass.zerotierfix.ui;
 
+import android.content.pm.ActivityInfo;
 import android.os.Bundle;
 import android.view.KeyEvent;
 
@@ -20,6 +21,8 @@ public class CaptureActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // 强制竖屏：彻底压住 journeyapps 库在任何路径下施加的横屏（含 sensorLandscape）
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.capture_small);
 
@@ -35,6 +38,14 @@ public class CaptureActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         capture.onResume();
+    }
+
+    /**
+     * 拦截 journeyapps 库内部可能调用的方向设定，一律强制竖屏，杜绝被改回横屏。
+     */
+    @Override
+    public void setRequestedOrientation(int requestedOrientation) {
+        super.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }
 
     @Override
